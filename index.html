@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Lecture audio</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet"/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        /* ========================================= */
+        /* --- 1. Styles de Base (Réinitialisation & Global) --- */
+        /* ========================================= */
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html, body {
+            font-family: 'Poppins', sans-serif;
+            background-color: #ffffff;
+            height: 100%;
+            width: 100%;
+            overflow: hidden; /* Empêche le défilement général */
+            position: fixed; /* Fixe le corps pour centrer le lecteur */
+        }
+
+        body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* ========================================= */
+        /* --- 2. Conteneur Principal du Lecteur Audio --- */
+        /* ========================================= */
+
+        .audio-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            padding: 0 20px;
+        }
+
+        .audio-controls {
+            background: white;
+            padding: 10px 16px 10px 20px;
+            border-radius: 100px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            box-shadow: 0px 4px 16px rgba(0,0,0,0.08);
+            transition: all 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+            width: auto; /* Permet à la largeur de s'adapter au contenu */
+            /* MODIFIÉ: Largeur par défaut pour contenir tout le contenu initialement */
+            max-width: 450px; /* Commence avec une largeur suffisante pour tout voir (desktop) */
+            position: relative;
+            overflow: hidden; /* Important pour les transitions des éléments internes */
+            /* AJOUTÉ: Pour centrer le contenu quand pas en mode expanded (ou aligner à gauche si plus petit) */
+            justify-content: flex-start; /* Aligne les éléments à gauche par défaut */
+        }
+
+        /* État 'expanded' (lorsque l'audio joue) */
+        .audio-controls.expanded {
+            max-width: 450px; /* Conserve la largeur maximale pour desktop */
+            padding-right: 24px;
+            justify-content: space-between; /* Pour espacer les côtés */
+        }
+
+        /* ========================================= */
+        /* --- 3. Contrôles Gauche (Bouton Play/Pause) --- */
+        /* ========================================= */
+
+        .controls-left {
+            display: flex;
+            align-items: center;
+            position: relative; /* Pour positionner le bouton restart */
+            /*z-index: 2;  S'assurer que le bouton play est au-dessus */
+        }
+
+        .play-btn, .restart-btn {
+            background-color: #1155cc;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            padding: 0;
+            line-height: 0;
+            transition: all 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+            position: relative;
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+
+        .play-btn:hover,
+        .restart-btn:hover {
+            background-color: #0d47a1;
+        }
+
+        /* Corrige le décalage du bouton play-btn.active pour qu'il soit bien aligné avec le reste des éléments au lieu de se superposer */
+        .play-btn.active {
+            transform: translateX(0); /* On ne déplace plus le bouton play directement ici */
+        }
+
+        .play-btn svg,
+        .restart-btn svg {
+            width: 18px;
+            height: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.3s ease;
+        }
+
+        /* Ajustement des icônes SVG si elles sont un peu décalées */
+        #playIcon {
+            transform: translateX(1px);
+        }
+
+        #pauseIcon {
+            transform: translateX(-1px);
+        }
+
+        /* ========================================= */
+        /* --- 4. Contrôles Droite (Temps & Vitesse) --- */
+        /* ========================================= */
+
+        .controls-right {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            transition: all 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+            flex-grow: 1; /* Permet aux éléments de droite de prendre de l'espace */
+            justify-content: flex-end; /* Aligner à droite dans l'espace disponible */
+
+            /* MODIFIÉ: Rendre visible par défaut */
+            opacity: 1; /* Visible par défaut */
+            transform: translateX(0); /* Pas de décalage initial */
+            margin-left: 10px; /* Un petit espace par défaut */
+            overflow: visible; /* Le contenu est visible */
+            white-space: nowrap; /* Empêche les retours à la ligne */
+            /* SUPPRIMÉ: max-width: 0; était ici */
+        }
+
+        /* La classe .slide-right-full n'est plus critique pour l'apparition, mais peut affiner la transition d'espacement */
+        .controls-right.slide-right-full {
+            margin-left: 20px; /* Un peu plus d'espace quand étendu (optionnel) */
+            /* SUPPRIMÉ: max-width: 300px; était ici et pouvait causer des problèmes de largeur */
+        }
+
+
+        .time-display {
+            font-size: 16px;
+            font-weight: 600;
+            color: #000;
+            width: 48px; /* Assure une largeur fixe pour 00:00 */
+            text-align: center;
+            font-variant-numeric: tabular-nums;
+            transition: all 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+            flex-shrink: 0;
+            /* AJOUTÉ: Assurez-vous qu'il est visible par défaut */
+            opacity: 1;
+        }
+
+        .speed-options {
+            display: flex;
+            flex-wrap: nowrap;
+            transition: all 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+            /* MODIFIÉ: Visible par défaut */
+            opacity: 1; /* Visible par défaut */
+            max-width: 200px; /* Valeur suffisante pour contenir les options */
+            pointer-events: auto; /* Permet les clics */
+            /* SUPPRIMÉ: overflow: hidden; était ici */
+        }
+
+        .speed-options span {
+            margin-left: 8px;
+            color: #777;
+            font-size: 14px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: color 0.2s ease;
+            white-space: nowrap;
+            position: relative; /* Pour l'effet ripple */
+            overflow: hidden; /* Pour l'effet ripple */
+            padding: 2px 5px; /* Pour donner un peu d'espace au ripple */
+            border-radius: 4px;
+        }
+
+        .speed-options span:hover {
+            color: #1155cc;
+        }
+
+        .speed-options .active {
+            color: #1155cc;
+            font-weight: 600;
+        }
+
+        /* ========================================= */
+        /* --- 5. Bouton de Redémarrage (Desktop uniquement) --- */
+        /* ========================================= */
+
+        #restartBtn {
+            background-color: #1155cc;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            padding: 0;
+            line-height: 0;
+            transition: all 0.6s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.3s ease; /* Ajout transition opacity */
+            flex-shrink: 0;
+            margin-right: 16px; /* Espace entre le bouton restart et le timer */
+            /* Retirez les propriétés de positionnement absolu */
+            /* position: absolute; */
+            /* left: 70px; */
+            /* z-index: 3; */
+        }
+
+        #restartBtn.fade-in {
+            opacity: 1;
+            transform: scale(1);
+            pointer-events: auto;
+        }
+
+        /* Masquer par défaut pour éviter le flash avant que JS ne le gère */
+        #restartBtn {
+            opacity: 0;
+            transform: scale(0.5);
+            pointer-events: none;
+        }
+        /* ========================================= */
+        /* --- 6. Animations Globales (Pulse & Ripple) --- */
+        /* ========================================= */
+
+        /* Animation de pulsation */
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+
+        .pulse-animation {
+            animation: pulse 0.6s ease-in-out;
+        }
+
+        /* Effet de ripple pour les boutons */
+        .ripple {
+            position: absolute;
+            background: rgba(255, 255, 255, 0.5); /* Blanc semi-transparent pour le ripple sur les boutons bleus */
+            border-radius: 50%;
+            transform: scale(0);
+            animation: ripple 0.6s linear;
+            pointer-events: none;
+        }
+        /* Ripple spécifique pour les spans de vitesse */
+        .speed-options span .ripple {
+            background: rgba(17, 85, 204, 0.2); /* Bleu clair pour le ripple sur les spans */
+        }
+
+        @keyframes ripple {
+            to {
+                transform: scale(2.5);
+                opacity: 0;
+            }
+        }
+
+        /* ========================================= */
+        /* --- 7. Responsive Design (Mobile) --- */
+        /* ========================================= */
+
+        @media (max-width: 480px) {
+            html, body {
+                overflow: auto; /* Permet le défilement sur mobile si contenu dépasse */
+                position: static; /* Retire la position fixe pour un comportement standard */
+            }
+
+            .audio-container {
+                padding: 0 10px; /* Moins de padding sur les côtés */
+            }
+
+            .audio-controls {
+                padding: 8px 14px 8px 16px;
+                gap: 10px;
+                box-shadow: 0px 2px 8px rgba(0,0,0,0.04);
+                max-width: 100%; /* S'adapte à la largeur du mobile par défaut */
+                width: calc(100% - 20px); /* Ajustement padding du conteneur */
+            }
+
+            .audio-controls.expanded {
+                padding-right: 18px;
+                max-width: 100%; /* S'adapte à la largeur du mobile */
+                width: calc(100% - 20px); /* Ajustement padding du conteneur */
+            }
+
+            .play-btn {
+                width: 36px;
+                height: 36px;
+            }
+
+            .time-display {
+                font-size: 14px;
+                width: 44px;
+            }
+
+            .speed-options span {
+                font-size: 12px;
+                margin-left: 6px;
+            }
+
+            /* Masquer le bouton de redémarrage sur mobile */
+            #restartBtn {
+                display: none; /* Toujours masqué sur mobile */
+            }
+
+            .controls-right {
+                gap: 12px;
+                margin-left: 8px; /* Petit espace par default sur mobile */
+                opacity: 1; /* Visible par défaut en mobile aussi */
+                transform: translateX(0);
+                overflow: visible; /* Les éléments ne doivent pas être cachés initiallement */
+            }
+
+            /* La classe .slide-right-full en mobile n'est plus aussi critique si tout est déjà visible */
+            .controls-right.slide-right-full {
+                transform: translateX(0); /* Glisse en place */
+                margin-left: 12px; /* Plus d'espace en mode étendu mobile */
+                max-width: 100%; /* S'adapte à la largeur du mobile étendu */
+            }
+
+            /* Les options de vitesse sont visibles par défaut en mobile aussi */
+            .speed-options {
+                max-width: 120px; /* Ajustez pour les options de vitesse en mobile */
+                opacity: 1;
+                pointer-events: auto;
+            }
+
+            .play-btn.active {
+                transform: translateX(0); /* Pas de déplacement du bouton play sur mobile */
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="audio-container">
+        <audio id="cardioAudio" src="https://eliereyara.github.io/mon-audio-lecteur/ElevenLabs_2025-06-25T14_15_18_Anna - French Adult_pvc_sp100_s78_sb91_se0_b_m2.mp3" preload="auto">
+            Votre navigateur ne supporte pas l'élément audio.
+        </audio>
+        <div class="audio-controls" id="audioControls">
+            <div class="controls-left">
+                <button class="play-btn" id="playPauseBtn">
+                    <svg id="playIcon" width="18" height="18" viewBox="0 0 16 16" fill="none">
+                        <path d="M3 2L13 8L3 14V2Z" fill="white"/>
+                    </svg>
+                    <svg id="pauseIcon" width="18" height="18" viewBox="0 0 16 16" fill="none" style="display: none;">
+                        <rect x="5" y="2" width="3" height="12" fill="white"/>
+                        <rect x="10" y="2" width="3" height="12" fill="white"/>
+                    </svg>
+                </button>
+            </div>
+            
+            <div class="controls-right" id="controlsRight">
+                <button class="restart-btn" id="restartBtn">
+                    <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
+                        <path d="M8 2V0L4 3.5L8 7V5C10.21 5 12 6.79 12 9C12 11.21 10.21 13 8 13C5.79 13 4 11.21 4 9H2C2 12.31 4.69 15 8 15C11.31 15 14 12.31 14 9C14 5.69 11.31 3 8 3V2Z" fill="white"/>
+                    </svg>
+                </button>
+                <div class="time-display" id="timeDisplay">00:00</div>
+                <div class="speed-options">
+                    <span data-speed="0.5">0.5x</span>
+                    <span data-speed="1">1x</span>
+                    <span data-speed="1.5" class="active">1.5x</span>
+                    <span data-speed="2">2x</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Pas besoin de la variable 'text' ici car nous lisons un MP3.
+            // const text = `... votre long texte ...`; 
+
+            // NOUVEAU : Récupérez l'élément audio HTML5
+            const audio = document.getElementById('cardioAudio');
+
+            const audioControls = document.getElementById('audioControls');
+            const playPauseBtn = document.getElementById('playPauseBtn');
+            const playIcon = document.getElementById('playIcon');
+            const pauseIcon = document.getElementById('pauseIcon');
+            const timeDisplay = document.getElementById('timeDisplay');
+            const speedSpans = document.querySelectorAll('.speed-options span');
+            const restartBtn = document.getElementById('restartBtn');
+            const controlsRight = document.getElementById('controlsRight');
+
+            let isPlaying = false;
+            let currentSpeed = 1.5; // Doit correspondre à la valeur par défaut de votre HTML
+            let timerInterval = null;
+            // PLUS BESOIN de 'voices' ou 'utterance'
+            // let voices = []; 
+            // let utterance = null;
+            
+            let animationInProgress = false;
+            let isMobile = window.innerWidth <= 480;
+
+            // Mettre à jour isMobile lors du redimensionnement et ajuster la visibilité du bouton Restart
+            window.addEventListener('resize', () => {
+                isMobile = window.innerWidth <= 480;
+                if (isMobile) {
+                    restartBtn.style.display = 'none';
+                } else {
+                    // Rend le bouton restart visible pour l'animation s'il était masqué par CSS mobile
+                    restartBtn.style.display = ''; 
+                    // Si l'audio n'est pas en lecture, il doit être caché visuellement au début
+                    if (!isPlaying && !audioControls.classList.contains('expanded')) {
+                        restartBtn.classList.remove('fade-in');
+                    }
+                }
+            });
+
+            // Ajouter l'effet de ripple aux boutons
+            function createRipple(event) {
+                const button = event.currentTarget;
+                const ripple = document.createElement('span');
+                const diameter = Math.max(button.clientWidth, button.clientHeight);
+                
+                ripple.style.width = ripple.style.height = `${diameter}px`;
+                ripple.style.left = `${event.clientX - button.getBoundingClientRect().left - diameter / 2}px`;
+                ripple.style.top = `${event.clientY - button.getBoundingClientRect().top - diameter / 2}px`;
+                ripple.classList.add('ripple');
+                
+                const existingRipple = button.querySelector('.ripple');
+                if (existingRipple) {
+                    existingRipple.remove();
+                }
+                
+                button.appendChild(ripple);
+                
+                setTimeout(() => {
+                    ripple.remove();
+                }, 600);
+            }
+
+            // Fonctions de formatage et de gestion du minuteur
+            function formatTime(seconds) {
+                const mins = String(Math.floor(seconds / 60)).padStart(2, '0');
+                const secs = String(Math.floor(seconds % 60)).padStart(2, '0');
+                return `${mins}:${secs}`;
+            }
+
+            function updateTimerDisplay() {
+                // NOUVEAU : Utilisez audio.currentTime
+                timeDisplay.textContent = formatTime(audio.currentTime);
+            }
+
+            function startTimer() {
+                clearInterval(timerInterval);
+                // NOUVEAU : Le minuteur s'appuie sur l'événement 'timeupdate' du lecteur audio
+                // Pas besoin de setInterval si on se base sur 'timeupdate' pour l'affichage précis.
+                // Cependant, pour un affichage "par seconde" plus stable visuellement, on peut garder un setInterval
+                timerInterval = setInterval(updateTimerDisplay, 1000); 
+            }
+
+            function stopTimer() {
+                clearInterval(timerInterval);
+            }
+
+            // Fonctions d'animation de la barre de lecture (INCHANGÉES)
+            function animatePlayback() {
+                if (animationInProgress) return;
+                animationInProgress = true;
+
+                playPauseBtn.classList.add('active');
+
+                if (!isMobile) {
+                    restartBtn.style.display = 'inline-flex';
+                    setTimeout(() => {
+                        restartBtn.classList.add('fade-in');
+                        animationInProgress = false;
+                    }, 300);
+                } else {
+                    animationInProgress = false;
+                }
+            }
+
+            function resetAnimation() {
+                if (!isMobile) {
+                    restartBtn.classList.remove('fade-in');
+                    // AJOUTÉ: Masquer le bouton APRES la transition d'opacité
+                    restartBtn.addEventListener('transitionend', function handler() {
+                        if (!restartBtn.classList.contains('fade-in')) { // S'assure que c'est la transition de disparition
+                            restartBtn.style.display = 'none';
+                            restartBtn.removeEventListener('transitionend', handler);
+                        }
+                    });
+                }
+
+                setTimeout(() => {
+                    playPauseBtn.classList.remove('active');
+
+                    setTimeout(() => {
+                        //audioControls.classList.remove('expanded');
+                    }, 300);
+                }, 300);
+            }
+
+            // NOUVEAU : Fonction pour lancer la lecture du MP3
+            function playAudio() {
+                // Assurez-vous que l'audio est bien chargé avant de jouer, ou gérons l'événement 'canplay'
+                audio.play()
+                    .catch(error => {
+                        console.error("Erreur de lecture audio :", error);
+                        // Gérer les cas où la lecture automatique est bloquée
+                        alert("Le navigateur a bloqué la lecture automatique. Veuillez cliquer sur Play.");
+                        // Afficher l'icône Play même après l'erreur pour que l'utilisateur puisse réessayer
+                        playIcon.style.display = 'block';
+                        pauseIcon.style.display = 'none';
+                        isPlaying = false;
+                        stopTimer();
+                        resetAnimation();
+                    });
+            }
+
+            // NOUVEAU : Fonction pour gérer Play/Pause (basée sur l'élément <audio>)
+            function togglePlayPause(event) {
+                createRipple(event);
+                
+                if (audio.paused || audio.ended) { // Si l'audio est en pause ou terminé
+                    playAudio(); // Lance la lecture via notre nouvelle fonction
+                } else { // Si l'audio est en cours de lecture
+                    audio.pause(); // Met en pause l'élément audio
+                }
+            }
+
+            // NOUVEAU : Fonction pour redémarrer l'audio (basée sur l'élément <audio>)
+            function restartAudio(event) {
+                createRipple(event);
+                
+                restartBtn.classList.add('pulse-animation');
+                setTimeout(() => {
+                    restartBtn.classList.remove('pulse-animation');
+                }, 600);
+                
+                audio.currentTime = 0; // Remet l'audio au début
+                playAudio();          // Relance la lecture
+            }
+            
+            // --- NOUVEAU : Gestionnaires d'événements de l'élément <audio> ---
+            audio.addEventListener('play', () => {
+                isPlaying = true;
+                playIcon.style.display = 'none';
+                pauseIcon.style.display = 'block';
+                startTimer(); // Démarrer le minuteur qui s'appuie sur audio.currentTime
+                animatePlayback();
+            });
+
+            audio.addEventListener('pause', () => {
+                isPlaying = false;
+                playIcon.style.display = 'block';
+                pauseIcon.style.display = 'none';
+                stopTimer();
+                resetAnimation();
+            });
+
+            audio.addEventListener('ended', () => {
+                isPlaying = false;
+                playIcon.style.display = 'block';
+                pauseIcon.style.display = 'none';
+                stopTimer();
+                audio.currentTime = 0; // Remet à zéro pour une nouvelle lecture
+                updateTimerDisplay(); // Affiche 00:00
+                resetAnimation();
+            });
+
+            // NOUVEAU : Écouteur pour la mise à jour du temps (alternative à setInterval si vous voulez une grande précision)
+            // audio.addEventListener('timeupdate', updateTimerDisplay);
+
+
+            // --- Écouteurs d'événements des contrôles personnalisés ---
+            playPauseBtn.addEventListener('click', togglePlayPause);
+            
+            if (!isMobile) {
+                restartBtn.addEventListener('click', restartAudio);
+            }
+            // Gère la visibilité initiale du bouton restart sur mobile
+            if (isMobile) {
+                restartBtn.style.display = 'none';
+            }
+
+            // Gestion du changement de vitesse
+            speedSpans.forEach(span => {
+                span.addEventListener('click', (event) => {
+                    createRipple(event); 
+                    
+                    speedSpans.forEach(s => {
+                        s.classList.remove('active');
+                        s.style.color = '#777';
+                    });
+                    
+                    span.classList.add('active');
+                    span.style.color = '#1155cc';
+                    
+                    const newSpeed = parseFloat(span.getAttribute('data-speed'));
+                    // NOUVEAU : Applique la nouvelle vitesse de lecture à l'élément audio
+                    audio.playbackRate = newSpeed; 
+                    currentSpeed = newSpeed; // Met à jour la variable pour les futures utilisations
+                    
+                    // Si l'audio est déjà en lecture, il appliquera la nouvelle vitesse immédiatement.
+                    // Pas besoin de relancer l'audio ou de gérer le texte restant comme avec SpeechSynthesis.
+                });
+            });
+
+            // Initialiser l'affichage du temps au chargement (il sera 00:00)
+            updateTimerDisplay();
+            // NOUVEAU : Assurez-vous que la vitesse par défaut est appliquée au chargement
+            audio.playbackRate = currentSpeed;
+        });
+    </script>
+    <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'93c1a9a9315e0088',t:'MTc0NjYzMDgyMS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script>
+</body>
+</html>
